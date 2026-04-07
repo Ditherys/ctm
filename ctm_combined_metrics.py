@@ -137,6 +137,27 @@ def fetch_all_pages_by_cursor(path, credentials, params=None, data_key=None):
     return items
 
 
+def fetch_all_pages_by_page(path, credentials, params=None, data_key=None):
+    page = 1
+    items = []
+
+    while True:
+        query = dict(params or {})
+        query["page"] = page
+        print(f"Fetching {data_key} page {page}...")
+        payload = api_get(path, query, credentials)
+        batch = payload.get(data_key or "", [])
+        if not batch:
+            break
+
+        items.extend(batch)
+        if not payload.get("next_page"):
+            break
+        page += 1
+
+    return items
+
+
 def load_agents():
     rows = []
     path = Path(AGENTS_FILE)
@@ -154,6 +175,46 @@ def load_agents():
                 }
             )
     return sorted(rows, key=lambda item: item["agent"].lower())
+
+
+def fetch_agents_from_api(credentials):
+    users = fetch_all_pages_by_page(
+        f"/api/v1/accounts/{credentials['account_id']}/users.json",
+        credentials=credentials,
+        params={"per_page": 100},
+        data_key="users",
+    )
+
+    rows = []
+    for user in users:
+        email = (user.get("email") or "").strip().lower()
+        if not email.endswith(EMAIL_DOMAIN):
+            continue
+
+        name = (user.get("name") or "").strip()
+        if not name:
+            first = (user.get("first_name") or "").strip()
+            last = (user.get("last_name") or "").strip()
+            name = f"{first} {last}".strip()
+
+        rows.append(
+            {
+                "id": (user.get("id") or "").strip(),
+                "agent": name,
+                "email": email,
+            }
+        )
+
+    return sorted(rows, key=lambda item: item["agent"].lower())
+
+
+def load_agents_with_fallback(credentials):
+    path = Path(AGENTS_FILE)
+    if path.exists():
+        return load_agents()
+
+    print(f"{AGENTS_FILE} not found, fetching alliance agents from CTM API instead...")
+    return fetch_agents_from_api(credentials)
 
 
 def get_calls_cache_path(start_date, end_date):
@@ -289,6 +350,9 @@ def build_combined_rows(
     for agent in agents:
         inbound = inbound_map.get(agent["email"]) or {}
         hold = hold_map.get(agent["email"]) or {}
+        inbound_calls_value = int(inbound.get("count", 0) or 0)
+        if inbound_calls_value == 0:
+            continue
         rows.append(
             {
                 "date": report_date,
@@ -296,7 +360,7 @@ def build_combined_rows(
                 "user_email": agent["email"],
                 "first_time_caller": first_time_counts.get(agent["email"], 0),
                 "transfer_count": transferred_counts.get(agent["email"], 0),
-                "inbound_calls": inbound.get("count", 0),
+                "inbound_calls": inbound_calls_value,
                 "inbound_minutes": seconds_to_hms(inbound.get("total", 0)),
                 "hold_time": seconds_to_hms(hold.get("total", 0)),
                 "last_updated": last_updated,
@@ -352,7 +416,7 @@ def main():
         raise SystemExit("start_date must be on or before end_date.")
 
     credentials = get_api_credentials()
-    agents = load_agents()
+    agents = load_agents_with_fallback(credentials)
     print(f"Found {len(agents)} alliance agents")
 
     payload, final_url = fetch_utilization_payload(
