@@ -36,6 +36,12 @@ def parse_args():
     )
     parser.add_argument("start_date", nargs="?")
     parser.add_argument("end_date", nargs="?")
+    parser.add_argument(
+        "--days-ago",
+        type=int,
+        default=0,
+        help="Use a relative day offset in CTM report timezone when no explicit dates are provided. 0=today, 1=yesterday.",
+    )
     parser.add_argument("--team-id", default=TEAM_ID)
     parser.add_argument("--timezone-label", default="EST")
     parser.add_argument("--interval", default="hour")
@@ -54,8 +60,13 @@ def today_in_report_timezone():
     return now_local.date().isoformat()
 
 
+def relative_date_in_report_timezone(days_ago):
+    now_local = datetime.now(ZoneInfo(CTM_REPORT_TIMEZONE))
+    return (now_local.date()).fromordinal(now_local.date().toordinal() - days_ago).isoformat()
+
+
 def resolve_dates(args):
-    start_date = args.start_date or today_in_report_timezone()
+    start_date = args.start_date or relative_date_in_report_timezone(args.days_ago)
     end_date = args.end_date or start_date
     start_date = validate_date(start_date).isoformat()
     end_date = validate_date(end_date).isoformat()
