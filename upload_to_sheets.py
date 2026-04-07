@@ -10,6 +10,7 @@ from ctm_combined_metrics import (
     CTM_REPORT_TIMEZONE,
     TEAM_ID,
     build_combined_rows,
+    format_sheet_date,
     fetch_calls,
     fetch_utilization_payload,
     get_api_credentials,
@@ -38,8 +39,8 @@ def parse_args():
     parser.add_argument("end_date", nargs="?")
     parser.add_argument(
         "--period",
-        choices=["daily", "last-completed-week"],
-        default="last-completed-week",
+        choices=["daily", "current-week-to-date", "last-completed-week"],
+        default="current-week-to-date",
         help="Default date behavior when explicit dates are not provided.",
     )
     parser.add_argument(
@@ -80,20 +81,32 @@ def last_completed_week_range():
     return previous_monday.isoformat(), previous_sunday.isoformat()
 
 
+def current_week_to_date_range():
+    now_local = datetime.now(ZoneInfo(CTM_REPORT_TIMEZONE)).date()
+    current_weekday = now_local.weekday()
+    current_monday = now_local.fromordinal(now_local.toordinal() - current_weekday)
+    current_sunday = current_monday.fromordinal(current_monday.toordinal() + 6)
+    return current_monday.isoformat(), now_local.isoformat(), current_sunday.isoformat()
+
+
 def resolve_dates(args):
+    report_date_label = None
     if args.start_date:
         start_date = args.start_date
         end_date = args.end_date or start_date
     elif args.period == "daily":
         start_date = relative_date_in_report_timezone(args.days_ago)
         end_date = start_date
+    elif args.period == "current-week-to-date":
+        start_date, end_date, display_end_date = current_week_to_date_range()
+        report_date_label = format_sheet_date(start_date, display_end_date)
     else:
         start_date, end_date = last_completed_week_range()
     start_date = validate_date(start_date).isoformat()
     end_date = validate_date(end_date).isoformat()
     if start_date > end_date:
         raise SystemExit("start_date must be on or before end_date.")
-    return start_date, end_date
+    return start_date, end_date, report_date_label
 
 
 def get_sheet_config():
@@ -216,7 +229,7 @@ def upsert_rows(worksheet, rows):
 
 def main():
     args = parse_args()
-    start_date, end_date = resolve_dates(args)
+    start_date, end_date, report_date_label = resolve_dates(args)
 
     credentials = get_api_credentials()
     agents = load_agents_with_fallback(credentials)
@@ -242,7 +255,14 @@ def main():
     )
     print(f"Fetched {len(calls)} inbound calls in range")
 
-    rows = build_combined_rows(start_date, end_date, agents, payload, calls)
+    rows = build_combined_rows(
+        start_date,
+        end_date,
+        agents,
+        payload,
+        calls,
+        report_date_label=report_date_label,
+    )
     worksheet = open_worksheet()
     ensure_headers(worksheet)
     updated, appended = upsert_rows(worksheet, rows)
