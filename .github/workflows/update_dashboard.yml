@@ -1,0 +1,32 @@
+name: Update Dashboard
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+
+jobs:
+  update-dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Update Google Sheet
+        env:
+          CTM_API_HOST: ${{ secrets.CTM_API_HOST }}
+          CTM_API_KEY: ${{ secrets.CTM_API_KEY }}
+          CTM_API_SECRET: ${{ secrets.CTM_API_SECRET }}
+          CTM_ACCOUNT_ID: ${{ secrets.CTM_ACCOUNT_ID }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_SHEET_TAB: ${{ secrets.GOOGLE_SHEET_TAB }}
+        run: python upload_to_sheets.py
