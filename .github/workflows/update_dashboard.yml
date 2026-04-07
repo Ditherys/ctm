@@ -30,4 +30,4 @@ jobs:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
           GOOGLE_SHEET_TAB: ${{ secrets.GOOGLE_SHEET_TAB }}
-        run: python upload_to_sheets.py
+        run: python upload_to_sheets.py --period current-week-to-date --refresh-calls-cache
