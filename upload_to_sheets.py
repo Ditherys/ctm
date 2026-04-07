@@ -37,10 +37,16 @@ def parse_args():
     parser.add_argument("start_date", nargs="?")
     parser.add_argument("end_date", nargs="?")
     parser.add_argument(
+        "--period",
+        choices=["daily", "last-completed-week"],
+        default="last-completed-week",
+        help="Default date behavior when explicit dates are not provided.",
+    )
+    parser.add_argument(
         "--days-ago",
         type=int,
         default=0,
-        help="Use a relative day offset in CTM report timezone when no explicit dates are provided. 0=today, 1=yesterday.",
+        help="Use a relative day offset in CTM report timezone for daily mode when no explicit dates are provided. 0=today, 1=yesterday.",
     )
     parser.add_argument("--team-id", default=TEAM_ID)
     parser.add_argument("--timezone-label", default="EST")
@@ -65,9 +71,24 @@ def relative_date_in_report_timezone(days_ago):
     return (now_local.date()).fromordinal(now_local.date().toordinal() - days_ago).isoformat()
 
 
+def last_completed_week_range():
+    now_local = datetime.now(ZoneInfo(CTM_REPORT_TIMEZONE)).date()
+    current_weekday = now_local.weekday()
+    current_monday = now_local.fromordinal(now_local.toordinal() - current_weekday)
+    previous_monday = current_monday.fromordinal(current_monday.toordinal() - 7)
+    previous_sunday = current_monday.fromordinal(current_monday.toordinal() - 1)
+    return previous_monday.isoformat(), previous_sunday.isoformat()
+
+
 def resolve_dates(args):
-    start_date = args.start_date or relative_date_in_report_timezone(args.days_ago)
-    end_date = args.end_date or start_date
+    if args.start_date:
+        start_date = args.start_date
+        end_date = args.end_date or start_date
+    elif args.period == "daily":
+        start_date = relative_date_in_report_timezone(args.days_ago)
+        end_date = start_date
+    else:
+        start_date, end_date = last_completed_week_range()
     start_date = validate_date(start_date).isoformat()
     end_date = validate_date(end_date).isoformat()
     if start_date > end_date:
