@@ -13,7 +13,7 @@ from ctm_combined_metrics import (
     fetch_calls,
     fetch_utilization_payload,
     get_api_credentials,
-    load_agents,
+    load_agents_with_fallback,
     validate_date,
 )
 
@@ -151,7 +151,7 @@ def main():
     start_date, end_date = resolve_dates(args)
 
     credentials = get_api_credentials()
-    agents = load_agents()
+    agents = load_agents_with_fallback(credentials)
     print(f"Found {len(agents)} alliance agents")
 
     payload, final_url = fetch_utilization_payload(
