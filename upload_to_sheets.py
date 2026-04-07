@@ -107,6 +107,42 @@ def ensure_headers(worksheet):
         worksheet.update("A1:I1", [EXPECTED_HEADERS])
 
 
+def normalize_date_key(value):
+    value = (value or "").strip()
+    if not value:
+        return ""
+
+    if " - " in value:
+        parts = value.split(" - ", 1)
+        normalized_parts = [normalize_date_key(part) for part in parts]
+        if all(normalized_parts):
+            return " - ".join(normalized_parts)
+
+    if "/" in value:
+        parts = value.split("/")
+        if len(parts) == 3:
+            try:
+                month = int(parts[0])
+                day = int(parts[1])
+                year = int(parts[2])
+                return f"{month:02d}/{day:02d}/{year:04d}"
+            except ValueError:
+                pass
+
+    if "-" in value:
+        parts = value.split("-")
+        if len(parts) == 3:
+            try:
+                year = int(parts[0])
+                month = int(parts[1])
+                day = int(parts[2])
+                return f"{month:02d}/{day:02d}/{year:04d}"
+            except ValueError:
+                pass
+
+    return value
+
+
 def row_to_sheet_values(row):
     return [
         row["date"],
@@ -127,7 +163,7 @@ def load_existing_index(worksheet):
     for row_number, values in enumerate(records[1:], start=2):
         if len(values) < 3:
             continue
-        date_value = values[0].strip()
+        date_value = normalize_date_key(values[0])
         email_value = values[2].strip().lower()
         if date_value and email_value:
             index[(date_value, email_value)] = row_number
@@ -140,7 +176,7 @@ def upsert_rows(worksheet, rows):
     appends = []
 
     for row in rows:
-        key = (row["date"], row["user_email"].lower())
+        key = (normalize_date_key(row["date"]), row["user_email"].lower())
         values = row_to_sheet_values(row)
         existing_row = existing_index.get(key)
         if existing_row:
