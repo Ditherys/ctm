@@ -339,13 +339,14 @@ def build_combined_rows(
     agents,
     payload,
     calls,
+    report_date_label=None,
 ):
     first_time_counts, transferred_counts = calculate_calls_metrics(calls, agents)
     inbound_map = build_metric_map(payload, "inbound_calls")
     hold_map = build_metric_map(payload, "hold_time")
 
     rows = []
-    report_date = format_sheet_date(start_date, end_date)
+    report_date = report_date_label or format_sheet_date(start_date, end_date)
     last_updated = current_run_timestamp()
     for agent in agents:
         inbound = inbound_map.get(agent["email"]) or {}
