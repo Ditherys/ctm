@@ -1,16 +1,16 @@
-name: Finalize Last Week
+name: Finalize Yesterday
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "15 10 * * 1"
-    - cron: "15 11 * * 1"
+    - cron: "15 4 * * *"
+    - cron: "15 5 * * *"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
-  finalize-last-week:
+  finalize-yesterday:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repo
@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Refresh last completed week in Google Sheet
+      - name: Refresh yesterday in Google Sheet
         env:
           CTM_API_HOST: ${{ secrets.CTM_API_HOST }}
           CTM_API_KEY: ${{ secrets.CTM_API_KEY }}
@@ -33,4 +33,4 @@ jobs:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
           GOOGLE_SHEET_TAB: ${{ secrets.GOOGLE_SHEET_TAB }}
-        run: python upload_to_sheets.py --period last-completed-week --refresh-calls-cache
+        run: python upload_to_sheets.py --period yesterday --refresh-calls-cache
