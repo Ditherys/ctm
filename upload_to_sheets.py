@@ -10,16 +10,17 @@ from ctm_combined_metrics import (
     CTM_REPORT_TIMEZONE,
     TEAM_ID,
     build_combined_rows,
-    format_sheet_date,
     fetch_calls,
     fetch_utilization_payload,
     get_api_credentials,
     load_agents_with_fallback,
     validate_date,
+    week_range_label_for_date,
 )
 
 EXPECTED_HEADERS = [
     "Date",
+    "Date range",
     "User name",
     "User email",
     "first_time_caller",
@@ -39,8 +40,8 @@ def parse_args():
     parser.add_argument("end_date", nargs="?")
     parser.add_argument(
         "--period",
-        choices=["daily", "current-week-to-date", "last-completed-week"],
-        default="current-week-to-date",
+        choices=["daily", "yesterday"],
+        default="daily",
         help="Default date behavior when explicit dates are not provided.",
     )
     parser.add_argument(
@@ -81,32 +82,25 @@ def last_completed_week_range():
     return previous_monday.isoformat(), previous_sunday.isoformat()
 
 
-def current_week_to_date_range():
-    now_local = datetime.now(ZoneInfo(CTM_REPORT_TIMEZONE)).date()
-    current_weekday = now_local.weekday()
-    current_monday = now_local.fromordinal(now_local.toordinal() - current_weekday)
-    current_sunday = current_monday.fromordinal(current_monday.toordinal() + 6)
-    return current_monday.isoformat(), now_local.isoformat(), current_sunday.isoformat()
-
-
 def resolve_dates(args):
     report_date_label = None
+    report_date_range_label = None
     if args.start_date:
         start_date = args.start_date
         end_date = args.end_date or start_date
     elif args.period == "daily":
         start_date = relative_date_in_report_timezone(args.days_ago)
         end_date = start_date
-    elif args.period == "current-week-to-date":
-        start_date, end_date, display_end_date = current_week_to_date_range()
-        report_date_label = format_sheet_date(start_date, display_end_date)
     else:
-        start_date, end_date = last_completed_week_range()
+        start_date = relative_date_in_report_timezone(1)
+        end_date = start_date
     start_date = validate_date(start_date).isoformat()
     end_date = validate_date(end_date).isoformat()
     if start_date > end_date:
         raise SystemExit("start_date must be on or before end_date.")
-    return start_date, end_date, report_date_label
+    report_date_label = validate_date(start_date).strftime("%m/%d/%Y")
+    report_date_range_label = week_range_label_for_date(start_date)
+    return start_date, end_date, report_date_label, report_date_range_label
 
 
 def get_sheet_config():
@@ -138,7 +132,7 @@ def open_worksheet():
 def ensure_headers(worksheet):
     current_headers = worksheet.row_values(1)
     if current_headers != EXPECTED_HEADERS:
-        worksheet.update("A1:I1", [EXPECTED_HEADERS])
+        worksheet.update("A1:J1", [EXPECTED_HEADERS])
 
 
 def normalize_date_key(value):
@@ -180,6 +174,7 @@ def normalize_date_key(value):
 def row_to_sheet_values(row):
     return [
         row["date"],
+        row["date_range"],
         row["user_name"],
         row["user_email"],
         row["first_time_caller"],
@@ -195,12 +190,13 @@ def load_existing_index(worksheet):
     records = worksheet.get_all_values()
     index = {}
     for row_number, values in enumerate(records[1:], start=2):
-        if len(values) < 3:
+        if len(values) < 4:
             continue
         date_value = normalize_date_key(values[0])
-        email_value = values[2].strip().lower()
-        if date_value and email_value:
-            index[(date_value, email_value)] = row_number
+        date_range_value = normalize_date_key(values[1])
+        email_value = values[3].strip().lower()
+        if date_value and date_range_value and email_value:
+            index[(date_value, date_range_value, email_value)] = row_number
     return index
 
 
@@ -210,7 +206,11 @@ def upsert_rows(worksheet, rows):
     appends = []
 
     for row in rows:
-        key = (normalize_date_key(row["date"]), row["user_email"].lower())
+        key = (
+            normalize_date_key(row["date"]),
+            normalize_date_key(row["date_range"]),
+            row["user_email"].lower(),
+        )
         values = row_to_sheet_values(row)
         existing_row = existing_index.get(key)
         if existing_row:
@@ -219,7 +219,7 @@ def upsert_rows(worksheet, rows):
             appends.append(values)
 
     for row_number, values in updates:
-        worksheet.update(f"A{row_number}:I{row_number}", [values])
+        worksheet.update(f"A{row_number}:J{row_number}", [values])
 
     if appends:
         worksheet.append_rows(appends, value_input_option="USER_ENTERED")
@@ -229,7 +229,7 @@ def upsert_rows(worksheet, rows):
 
 def main():
     args = parse_args()
-    start_date, end_date, report_date_label = resolve_dates(args)
+    start_date, end_date, report_date_label, report_date_range_label = resolve_dates(args)
 
     credentials = get_api_credentials()
     agents = load_agents_with_fallback(credentials)
@@ -262,6 +262,7 @@ def main():
         payload,
         calls,
         report_date_label=report_date_label,
+        report_date_range_label=report_date_range_label,
     )
     worksheet = open_worksheet()
     ensure_headers(worksheet)
