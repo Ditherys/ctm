@@ -72,6 +72,13 @@ def format_sheet_date(start_date, end_date):
     return f"{start.strftime('%m/%d/%Y')} - {end.strftime('%m/%d/%Y')}"
 
 
+def week_range_label_for_date(date_string):
+    day = validate_date(date_string)
+    monday = day.fromordinal(day.toordinal() - day.weekday())
+    sunday = monday.fromordinal(monday.toordinal() + 6)
+    return f"{monday.strftime('%m/%d/%Y')} - {sunday.strftime('%m/%d/%Y')}"
+
+
 def current_run_timestamp():
     now_local = datetime.now(ZoneInfo(CTM_REPORT_TIMEZONE))
     return now_local.strftime("%m/%d/%Y %I:%M:%S %p")
@@ -340,6 +347,7 @@ def build_combined_rows(
     payload,
     calls,
     report_date_label=None,
+    report_date_range_label=None,
 ):
     first_time_counts, transferred_counts = calculate_calls_metrics(calls, agents)
     inbound_map = build_metric_map(payload, "inbound_calls")
@@ -347,6 +355,7 @@ def build_combined_rows(
 
     rows = []
     report_date = report_date_label or format_sheet_date(start_date, end_date)
+    report_date_range = report_date_range_label or week_range_label_for_date(start_date)
     last_updated = current_run_timestamp()
     for agent in agents:
         inbound = inbound_map.get(agent["email"]) or {}
@@ -357,6 +366,7 @@ def build_combined_rows(
         rows.append(
             {
                 "date": report_date,
+                "date_range": report_date_range,
                 "user_name": agent["agent"],
                 "user_email": agent["email"],
                 "first_time_caller": first_time_counts.get(agent["email"], 0),
@@ -382,6 +392,7 @@ def write_rows_to_csv(rows, output_file):
             handle,
             fieldnames=[
                 "date",
+                "date_range",
                 "user_name",
                 "user_email",
                 "first_time_caller",
@@ -446,7 +457,7 @@ def main():
     print(f"Saved to {output_path.name}")
     for row in rows:
         print(
-            f"{row['date']}, {row['user_name']}, {row['user_email']}, "
+            f"{row['date']}, {row['date_range']}, {row['user_name']}, {row['user_email']}, "
             f"{row['first_time_caller']}, {row['transfer_count']}, "
             f"{row['inbound_calls']}, {row['inbound_minutes']}, "
             f"{row['hold_time']}, {row['last_updated']}"
