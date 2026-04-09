@@ -31,6 +31,8 @@ EXPECTED_HEADERS = [
     "Last updated",
 ]
 
+SHEETS_EPOCH = datetime(1899, 12, 30)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -132,7 +134,71 @@ def open_worksheet():
 def ensure_headers(worksheet):
     current_headers = worksheet.row_values(1)
     if current_headers != EXPECTED_HEADERS:
-        worksheet.update("A1:J1", [EXPECTED_HEADERS])
+        worksheet.update("A1:J1", [EXPECTED_HEADERS], value_input_option="RAW")
+
+
+def ensure_column_formats(worksheet):
+    sheet_id = worksheet.id
+    requests = [
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": 1,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": 1,
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "numberFormat": {
+                            "type": "DATE",
+                            "pattern": "MM/dd/yyyy",
+                        }
+                    }
+                },
+                "fields": "userEnteredFormat.numberFormat",
+            }
+        },
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": 1,
+                    "startColumnIndex": 7,
+                    "endColumnIndex": 9,
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "numberFormat": {
+                            "type": "DURATION",
+                            "pattern": "[hh]:mm:ss",
+                        }
+                    }
+                },
+                "fields": "userEnteredFormat.numberFormat",
+            }
+        },
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": 1,
+                    "startColumnIndex": 9,
+                    "endColumnIndex": 10,
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "numberFormat": {
+                            "type": "DATE_TIME",
+                            "pattern": "MM/dd/yyyy hh:mm:ss AM/PM",
+                        }
+                    }
+                },
+                "fields": "userEnteredFormat.numberFormat",
+            }
+        },
+    ]
+    worksheet.spreadsheet.batch_update({"requests": requests})
 
 
 def normalize_date_key(value):
@@ -171,18 +237,35 @@ def normalize_date_key(value):
     return value
 
 
+def date_to_sheet_serial(value):
+    parsed = datetime.strptime(value, "%m/%d/%Y")
+    return (parsed - SHEETS_EPOCH).days
+
+
+def datetime_to_sheet_serial(value):
+    parsed = datetime.strptime(value, "%m/%d/%Y %I:%M:%S %p")
+    delta = parsed - SHEETS_EPOCH
+    return delta.days + (delta.seconds / 86400)
+
+
+def hms_to_sheet_serial(value):
+    hours, minutes, seconds = [int(part) for part in value.split(":")]
+    total_seconds = (hours * 3600) + (minutes * 60) + seconds
+    return total_seconds / 86400
+
+
 def row_to_sheet_values(row):
     return [
-        row["date"],
+        date_to_sheet_serial(row["date"]),
         row["date_range"],
         row["user_name"],
         row["user_email"],
         row["first_time_caller"],
         row["transfer_count"],
         row["inbound_calls"],
-        row["inbound_minutes"],
-        row["hold_time"],
-        row["last_updated"],
+        hms_to_sheet_serial(row["inbound_minutes"]),
+        hms_to_sheet_serial(row["hold_time"]),
+        datetime_to_sheet_serial(row["last_updated"]),
     ]
 
 
@@ -219,7 +302,7 @@ def upsert_rows(worksheet, rows):
             appends.append(values)
 
     for row_number, values in updates:
-        worksheet.update(f"A{row_number}:J{row_number}", [values])
+        worksheet.update(f"A{row_number}:J{row_number}", [values], value_input_option="USER_ENTERED")
 
     if appends:
         worksheet.append_rows(appends, value_input_option="USER_ENTERED")
@@ -266,6 +349,7 @@ def main():
     )
     worksheet = open_worksheet()
     ensure_headers(worksheet)
+    ensure_column_formats(worksheet)
     updated, appended = upsert_rows(worksheet, rows)
     print(f"Google Sheets sync complete. Updated {updated} rows, appended {appended} rows.")
 
