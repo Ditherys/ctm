@@ -170,7 +170,7 @@ def ensure_column_formats(worksheet):
                 "cell": {
                     "userEnteredFormat": {
                         "numberFormat": {
-                            "type": "DURATION",
+                            "type": "NUMBER",
                             "pattern": "[hh]:mm:ss",
                         }
                     }
