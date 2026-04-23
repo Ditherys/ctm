@@ -11,8 +11,6 @@ import requests
 from requests.auth import HTTPBasicAuth
 
 API_HOST = "https://api.calltrackingmetrics.com"
-API_KEY = "a341882d847fd790082ce05f378824a3e321f669"
-API_SECRET = "74db3c6ae35b0afd9e1d9a02cf358671e1fe"
 ACCOUNT_ID = "341882"
 AGENTS_FILE = "alliance_agents_with_email.csv"
 OUTPUT_FILE = "ctm_combined_metrics.csv"
@@ -84,15 +82,20 @@ def current_run_timestamp():
     return now_local.strftime("%m/%d/%Y %I:%M:%S %p")
 
 
-def get_env_or_default(name, default_value):
-    return os.getenv(name, default_value)
+def get_env_or_default(name, default_value=None):
+    value = os.getenv(name)
+    if value:
+        return value
+    if default_value is not None:
+        return default_value
+    raise SystemExit(f"Missing required environment variable: {name}")
 
 
 def get_api_credentials():
     return {
         "api_host": get_env_or_default("CTM_API_HOST", API_HOST),
-        "api_key": get_env_or_default("CTM_API_KEY", API_KEY),
-        "api_secret": get_env_or_default("CTM_API_SECRET", API_SECRET),
+        "api_key": get_env_or_default("CTM_API_KEY"),
+        "api_secret": get_env_or_default("CTM_API_SECRET"),
         "account_id": get_env_or_default("CTM_ACCOUNT_ID", ACCOUNT_ID),
     }
 
